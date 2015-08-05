@@ -30,12 +30,16 @@ import jenkins.model.Jenkins;
 import hudson.remoting.Channel;
 import hudson.util.RemotingDiagnostics;
 import hudson.util.RemotingDiagnostics.HeapDump;
+
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
+
+import com.google.common.collect.Maps;
 
 import javax.servlet.ServletException;
 import java.io.IOException;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * UI for probing Maven process.
@@ -49,11 +53,13 @@ import java.util.Map;
  */
 public final class MavenProbeAction implements Action {
     private final transient Channel channel;
+    private final Set<String> sensitiveEnvVars;
 
     public final AbstractProject<?,?> owner;
 
-    MavenProbeAction(AbstractProject<?,?> owner, Channel channel) {
+    MavenProbeAction(AbstractProject<?,?> owner, Channel channel, Set<String> sensitiveEnvVars) {
         this.channel = channel;
+        this.sensitiveEnvVars = sensitiveEnvVars;
         this.owner = owner;
     }
 
@@ -84,7 +90,16 @@ public final class MavenProbeAction implements Action {
      * If this is the master, it returns the system property of the master computer.
      */
     public Map<String,String> getEnvVars() throws IOException, InterruptedException {
-        return EnvVars.getRemote(channel);
+        EnvVars tmp = EnvVars.getRemote(channel);
+
+        tmp = new EnvVars(Maps.transformEntries(tmp,
+            new Maps.EntryTransformer<String, String, String>() {
+                public String transformEntry(String key, String value) {
+                    return sensitiveEnvVars.contains(key) ? "********" : value;
+                }
+            }));
+
+        return tmp;
     }
 
     /**

@@ -34,6 +34,7 @@ import hudson.maven.MavenBuild.ProxyImpl2;
 import hudson.maven.reporters.MavenAggregatedArtifactRecord;
 import hudson.maven.reporters.MavenFingerprinter;
 import hudson.maven.reporters.MavenMailer;
+import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
 import hudson.model.Action;
 import hudson.model.Build;
@@ -45,6 +46,7 @@ import hudson.model.Executor;
 import hudson.model.Fingerprint;
 import hudson.model.Node;
 import hudson.model.ParameterDefinition;
+import hudson.model.ParameterValue;
 import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.Result;
@@ -666,7 +668,9 @@ public class MavenModuleSetBuild extends AbstractMavenBuild<MavenModuleSet,Maven
                             buildEnvironments.add(e);
                         }
 
-                    	// run pre build steps
+                        Set<String> sensitiveEnvVars = getSensitiveEnvVars(MavenModuleSetBuild.this, parameters);
+
+                        // run pre build steps
                     	if(!preBuild(listener,project.getPrebuilders())
                         || !preBuild(listener,project.getPostbuilders())
                         || !preBuild(listener,project.getPublishers())){
@@ -854,7 +858,7 @@ public class MavenModuleSetBuild extends AbstractMavenBuild<MavenModuleSet,Maven
                         
                         MavenProbeAction mpa=null;
                         try {
-                            mpa = new MavenProbeAction(project,process.channel);
+                            mpa = new MavenProbeAction(project, process.channel, sensitiveEnvVars);
                             addAction(mpa);
                             r = process.call(builder);
                             for (ProxyImpl2 proxy : proxies.values()) {
@@ -920,6 +924,21 @@ public class MavenModuleSetBuild extends AbstractMavenBuild<MavenModuleSet,Maven
         }
 
         
+        private Set<String> getSensitiveEnvVars(AbstractBuild<?,?> build, ParametersAction action) {
+            EnvVars sesitiveEnvVars = new EnvVars();
+
+            if (action != null) {
+                List<ParameterValue> parameters = action.getParameters();
+                for (ParameterValue param : parameters) {
+                    if (param.isSensitive()) {
+                        param.buildEnvVars(build, sesitiveEnvVars);
+                    }
+                }
+            }
+
+            return new HashSet<String>(sesitiveEnvVars.keySet());
+        }
+
         private boolean build(BuildListener listener, Collection<hudson.tasks.Builder> steps) throws IOException, InterruptedException {
             for( BuildStep bs : steps ){
                 if(!perform(bs,listener)) {
