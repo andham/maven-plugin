@@ -40,6 +40,7 @@ import javax.servlet.ServletException;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * UI for probing Maven process.
@@ -53,13 +54,13 @@ import java.util.Set;
  */
 public final class MavenProbeAction implements Action {
     private final transient Channel channel;
-    private final Set<String> sensitiveEnvVars;
+    private final transient AbstractMavenBuild<?,?> build;
 
     public final AbstractProject<?,?> owner;
 
-    MavenProbeAction(AbstractProject<?,?> owner, Channel channel, Set<String> sensitiveEnvVars) {
+    MavenProbeAction(AbstractProject<?,?> owner, Channel channel, AbstractMavenBuild<?,?> build) {
         this.channel = channel;
-        this.sensitiveEnvVars = sensitiveEnvVars;
+        this.build = build;
         this.owner = owner;
     }
 
@@ -82,7 +83,19 @@ public final class MavenProbeAction implements Action {
      * If this is the master, it returns the system property of the master computer.
      */
     public Map<Object,Object> getSystemProperties() throws IOException, InterruptedException {
-        return RemotingDiagnostics.getSystemProperties(channel);
+        Map<Object,Object> props = RemotingDiagnostics.getSystemProperties(channel);
+        
+        if (build != null) {
+            final Set<String> sensitiveBuildVars = build.getSensitiveBuildVariables();
+            props = new TreeMap<Object, Object>(Maps.transformEntries(props,
+                new Maps.EntryTransformer<Object, Object, Object>() {
+                    public Object transformEntry(Object key, Object value) {
+                        return sensitiveBuildVars.contains(key.toString()) ? "********" : value;
+                    }
+                }));
+        }
+        
+        return props;
     }
 
     /**
@@ -90,16 +103,19 @@ public final class MavenProbeAction implements Action {
      * If this is the master, it returns the system property of the master computer.
      */
     public Map<String,String> getEnvVars() throws IOException, InterruptedException {
-        EnvVars tmp = EnvVars.getRemote(channel);
+        EnvVars vars = EnvVars.getRemote(channel);
 
-        tmp = new EnvVars(Maps.transformEntries(tmp,
-            new Maps.EntryTransformer<String, String, String>() {
-                public String transformEntry(String key, String value) {
-                    return sensitiveEnvVars.contains(key) ? "********" : value;
-                }
-            }));
+        if (build != null) {
+            final Set<String> sensitiveBuildVars = build.getSensitiveBuildVariables();
+            vars = new EnvVars(Maps.transformEntries(vars,
+                new Maps.EntryTransformer<String, String, String>() {
+                    public String transformEntry(String key, String value) {
+                        return sensitiveBuildVars.contains(key) ? "********" : value;
+                    }
+                }));
+        }
 
-        return tmp;
+        return vars;
     }
 
     /**

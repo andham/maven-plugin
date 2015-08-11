@@ -668,8 +668,6 @@ public class MavenModuleSetBuild extends AbstractMavenBuild<MavenModuleSet,Maven
                             buildEnvironments.add(e);
                         }
 
-                        Set<String> sensitiveEnvVars = getSensitiveEnvVars(MavenModuleSetBuild.this, parameters);
-
                         // run pre build steps
                     	if(!preBuild(listener,project.getPrebuilders())
                         || !preBuild(listener,project.getPostbuilders())
@@ -858,7 +856,7 @@ public class MavenModuleSetBuild extends AbstractMavenBuild<MavenModuleSet,Maven
                         
                         MavenProbeAction mpa=null;
                         try {
-                            mpa = new MavenProbeAction(project, process.channel, sensitiveEnvVars);
+                            mpa = new MavenProbeAction(project, process.channel, MavenModuleSetBuild.this);
                             addAction(mpa);
                             r = process.call(builder);
                             for (ProxyImpl2 proxy : proxies.values()) {
@@ -921,22 +919,6 @@ public class MavenModuleSetBuild extends AbstractMavenBuild<MavenModuleSet,Maven
                 throw e;
             } finally {
             }
-        }
-
-        
-        private Set<String> getSensitiveEnvVars(AbstractBuild<?,?> build, ParametersAction action) {
-            EnvVars sesitiveEnvVars = new EnvVars();
-
-            if (action != null) {
-                List<ParameterValue> parameters = action.getParameters();
-                for (ParameterValue param : parameters) {
-                    if (param.isSensitive()) {
-                        param.buildEnvVars(build, sesitiveEnvVars);
-                    }
-                }
-            }
-
-            return new HashSet<String>(sesitiveEnvVars.keySet());
         }
 
         private boolean build(BuildListener listener, Collection<hudson.tasks.Builder> steps) throws IOException, InterruptedException {
